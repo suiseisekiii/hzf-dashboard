@@ -65,13 +65,12 @@ function renderOverview() {
   renderStations();
 }
 function renderCycles() {
-  document.querySelectorAll("[data-cycle]").forEach(select => {
-    select.replaceChildren();
-    for (const item of state.catalog.cycles) select.append(element("option", {value: item.cycle}, `${stamp(item.init_time, true)} 起报`));
-    if (!state.catalog.cycles.length) select.append(element("option", {}, "暂无预报批次"));
-    select.disabled = !state.catalog.cycles.length;
-    if (state.cycle) select.value = state.cycle;
-  });
+  const select = $("cycle");
+  select.replaceChildren();
+  for (const item of state.catalog.cycles) select.append(element("option", {value: item.cycle}, `${stamp(item.init_time, true)} 起报`));
+  if (!state.catalog.cycles.length) select.append(element("option", {}, "暂无预报批次"));
+  select.disabled = !state.catalog.cycles.length;
+  if (state.cycle) select.value = state.cycle;
 }
 function renderStations() {
   const c = state.catalog, rec = c.observations?.latest_record;
@@ -206,12 +205,14 @@ function renderDaily() {
   setText("daily-subtitle", `${stamp(p.init_time, true)} 起报 · ${dates[0]} — ${dates[6]} · 与 01、03 同步选择批次`);
   for (const name of MODELS) series[name] = p.models[name]?.daily || [];
   const maps = Object.fromEntries(Object.entries(series).map(([name, rows]) => [name, new Map(rows.map(r => [r.date, r]))]));
-  const max = Math.max(1, ...Object.values(series).flatMap(rows => rows.filter(r => dates.includes(r.date)).map(r => r[key])).filter(number));
+  const names = ["observations", ...MODELS].filter(name => state.visible.has(name));
+  const max = Math.max(1, ...names.flatMap(name => series[name].filter(r => dates.includes(r.date)).map(r => r[key])).filter(number));
   const root = $("daily-content"); root.replaceChildren();
+  if (!names.length) { root.append(element("div", {class: "empty-inline"}, "点击图例，选择要显示的日指标")); return; }
   for (const day of dates) {
     const col = element("div", {class: "day-column"}), bars = element("div", {class: "day-bars"}), values = element("div", {class: "day-values"});
     const obsStatus = observationStatus(day, number(maps.observations.get(day)?.[key]));
-    for (const name of ["observations", ...MODELS]) {
+    for (const name of names) {
       const row = maps[name].get(day), v = row?.[key], incomplete = row?.status === "partial";
       const wrap = element("div", {class: "day-bar-wrap"});
       const text = `${NAMES[name]}：${value(v)}${number(v) ? " μg/m³" : name === "observations" ? `（${obsStatus}）` : "（无有效预报）"}${incomplete && number(v) ? "（部分时段）" : ""}`;
@@ -327,11 +328,10 @@ async function refresh(reason = "timer") {
 }
 
 $("refresh").addEventListener("click", () => refresh("manual"));
-document.querySelectorAll("[data-cycle]").forEach(select => select.addEventListener("change", event => {
+$("cycle").addEventListener("change", event => {
   state.cycle = event.target.value;
-  document.querySelectorAll("[data-cycle]").forEach(other => { other.value = state.cycle; });
   refresh("cycle");
-}));
+});
 document.querySelectorAll("[data-pollutant]").forEach(button => button.addEventListener("click", () => {
   state.pollutant = button.dataset.pollutant;
   document.querySelectorAll("[data-pollutant]").forEach(b => { const selected = b === button; b.classList.toggle("selected", selected); b.setAttribute("aria-pressed", String(selected)); });
@@ -345,7 +345,11 @@ document.querySelectorAll("[data-range]").forEach(button => button.addEventListe
 document.querySelectorAll("[data-series]").forEach(button => button.addEventListener("click", () => {
   const name = button.dataset.series;
   if (state.visible.has(name)) state.visible.delete(name); else state.visible.add(name);
-  button.setAttribute("aria-pressed", String(state.visible.has(name))); renderChart();
+  document.querySelectorAll("[data-series]").forEach(other => {
+    other.setAttribute("aria-pressed", String(state.visible.has(other.dataset.series)));
+  });
+  renderChart();
+  if (state.payload) renderDaily();
 }));
 $("hourly-chart").addEventListener("pointermove", e => {
   const g = chartGeometry; if (!g?.rows.length) return;

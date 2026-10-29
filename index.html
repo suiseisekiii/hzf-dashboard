@@ -7,10 +7,10 @@
   <meta name="hzf-data-source" content="static">
   <title>杭州空气质量预报与观测</title>
   <meta name="description" content="杭州空气质量观测、ProNet 与 FastForecast 预报对比。">
-  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="./styles.css">
-  <script src="./data-source.js" defer></script>
-  <script src="./app.js" defer></script>
+  <link rel="icon" href="./favicon.svg?v=670f98d74b3c2dceb98ac730677c2f3384e36bfd4bc9c604ba014d80af8c5859" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css?v=ebfc52f9be1ff923430017e91ef9f14dc128bcbb40ee6ce86d016e6afebbe44c">
+  <script src="./data-source.js?v=f044174eee0b522d982f77181a55c3a8259b4d94fa2ab970c2b13badf858fd02" defer></script>
+  <script src="./app.js?v=f74726075421147a5a9a8b8694784d85394f50fb6d9c896ed4d924296677e265" defer></script>
 </head>
 <body>
   <a class="skip" href="#main">跳至数据看板</a>
@@ -55,14 +55,14 @@
       </section>
 
       <section class="panel daily-panel" id="daily">
-        <div class="panel-head"><div><div class="section-kicker">02 / DAILY INDICATORS</div><h2 id="daily-heading">七天 PM₂.₅ 日平均浓度</h2><p id="daily-subtitle">所选起报次日起连续七天 · 与 01 共用起报选择</p></div><div class="cycle-control"><label for="daily-cycle">起报时间</label><select id="daily-cycle" data-cycle disabled><option>正在读取批次…</option></select></div></div>
-        <div class="daily-legend"><span><i class="legend-dot obs"></i>实况观测</span><span><i class="legend-line pronet"></i>ProNet</span><span><i class="legend-line fastforecast"></i>FastForecast</span><span class="unit">浓度 / μg·m⁻³</span></div>
+        <div class="panel-head"><div><div class="section-kicker">02 / DAILY INDICATORS</div><h2 id="daily-heading">七天 PM₂.₅ 日平均浓度</h2><p id="daily-subtitle">所选起报次日起连续七天 · 与 01 共用起报选择</p></div></div>
+        <div class="chart-meta"><div class="legend" role="group" aria-label="显示日指标"><button data-series="observations" aria-pressed="true"><i class="legend-dot obs"></i>实况观测</button><button data-series="pronet" aria-pressed="true"><i class="legend-line pronet"></i>ProNet</button><button data-series="fastforecast" aria-pressed="true"><i class="legend-line fastforecast"></i>FastForecast</button></div><span class="unit">浓度 / μg·m⁻³</span></div>
         <div class="daily-scroll"><div id="daily-content" class="daily-content"><div class="empty-inline">等待日指标…</div></div></div>
         <div class="panel-foot">日统计采用北京时间小时结束标签 01—24 时。PM₂.₅ 为日平均浓度，O₃ 为日最大 8 小时平均浓度。当日标记“统计中”，未来日期标记“待观测”；历史有效数据不足时标记“缺测”。“*”表示源数据未覆盖完整日时间位置。</div>
       </section>
 
       <section class="panel evaluation-panel" id="evaluation">
-        <div class="panel-head"><div><div class="section-kicker">03 / FORECAST EVALUATION</div><h2>七天预报效果评估</h2><p id="evaluation-subtitle">所选起报次日起连续七天 · 共同有效小时样本</p></div><div class="cycle-control"><label for="evaluation-cycle">起报时间</label><select id="evaluation-cycle" data-cycle disabled><option>正在读取批次…</option></select></div></div>
+        <div class="panel-head"><div><div class="section-kicker">03 / FORECAST EVALUATION</div><h2>七天预报效果评估</h2><p id="evaluation-subtitle">所选起报次日起连续七天 · 共同有效小时样本</p></div></div>
         <div id="evaluation-content"><div class="empty-inline">观测到达后计算有效样本</div></div>
         <div class="evaluation-note"><span>评估口径</span><p>与 02 使用同一起报、同一七天日期范围，按有效时间匹配当前已保存的小时观测，不受 01 展示时长选项影响。两模型均有该起报批次时，使用双方和观测均有效的共同样本；仅有一个模型时单独统计。MAE、RMSE 越小表示误差越小，偏差为预报减观测。单位均为 μg/m³。选择历史起报可查看已到达观测的完整评估过程。</p></div>
       </section>
