@@ -61,16 +61,17 @@ function renderOverview() {
     spark(`${prefix}-spark`, obs.hourly || [], field);
   }
   setText("station-count", c.station_count ?? "—");
-  setText("station-detail", c.latest_observation_time ? `观测更新至 ${stamp(c.latest_observation_time)}` : "等待观测到站");
+  setText("station-detail", c.latest_observation_time ? `观测更新至 ${stamp(c.latest_observation_time)}` : "等待观测数据");
   renderStations();
 }
 function renderCycles() {
-  const select = $("cycle");
-  select.replaceChildren();
-  for (const item of state.catalog.cycles) select.append(element("option", {value: item.cycle}, `${stamp(item.init_time, true)} 起报`));
-  if (!state.catalog.cycles.length) select.append(element("option", {}, "暂无预报批次"));
-  select.disabled = !state.catalog.cycles.length;
-  if (state.cycle) select.value = state.cycle;
+  document.querySelectorAll("[data-cycle]").forEach(select => {
+    select.replaceChildren();
+    for (const item of state.catalog.cycles) select.append(element("option", {value: item.cycle}, `${stamp(item.init_time, true)} 起报`));
+    if (!state.catalog.cycles.length) select.append(element("option", {}, "暂无预报批次"));
+    select.disabled = !state.catalog.cycles.length;
+    if (state.cycle) select.value = state.cycle;
+  });
 }
 function renderStations() {
   const c = state.catalog, rec = c.observations?.latest_record;
@@ -90,14 +91,14 @@ function renderStations() {
     card.append(measures); root.append(card);
   });
 }
-function rowsForChart() {
+function rowsForChart(full = false) {
   const p = state.payload;
   if (!p) return [];
   const series = {observations: p.observations?.hourly || []};
   for (const m of MODELS) series[m] = p.models[m]?.hourly || [];
   const predictionTimes = MODELS.flatMap(m => series[m].map(r => new Date(r.valid_time).getTime())).filter(Number.isFinite);
   if (!predictionTimes.length) return [];
-  const start = Math.min(...predictionTimes), end = Math.min(Math.max(...predictionTimes), state.range === "all" ? Infinity : start + (Number(state.range) - 1) * HOUR);
+  const start = Math.min(...predictionTimes), end = Math.min(Math.max(...predictionTimes), full || state.range === "all" ? Infinity : start + (Number(state.range) - 1) * HOUR);
   const maps = Object.fromEntries(Object.entries(series).map(([name, rows]) => [name, new Map(rows.map(r => [new Date(r.valid_time).getTime(), r]))]));
   const rows = [];
   for (let time = start; time <= end; time += HOUR) {
@@ -188,51 +189,73 @@ function renderTable() {
   }
   body.replaceChildren(fragment);
 }
+function beijingDay(instant) { return new Date(instant + 8 * HOUR).toISOString().slice(0, 10); }
+function cycleDays() {
+  const day = beijingDay(new Date(state.payload.init_time).getTime());
+  const midnight = new Date(`${day}T00:00:00+08:00`).getTime();
+  return Array.from({length: 7}, (_, i) => beijingDay(midnight + (i + 1) * 24 * HOUR));
+}
+function observationStatus(day, hasValue) {
+  const today = beijingDay(Date.now());
+  return day > today ? "待观测" : day === today ? "统计中" : hasValue ? "已更新" : "缺测";
+}
 function renderDaily() {
   const p = state.payload, key = state.pollutant === "pm25" ? "pm25_daily_mean" : "o3_daily_max_8h_mean";
-  setText("daily-heading", state.pollutant === "pm25" ? "每日 PM₂.₅ 平均浓度" : "每日 O₃ 最大 8 小时均值");
-  const series = {observations: p.observations?.daily || []};
+  const dates = cycleDays(), series = {observations: p.observations?.daily || []};
+  setText("daily-heading", state.pollutant === "pm25" ? "七天 PM₂.₅ 日平均浓度" : "七天 O₃ 日最大 8 小时平均浓度");
+  setText("daily-subtitle", `${stamp(p.init_time, true)} 起报 · ${dates[0]} — ${dates[6]} · 与 01、03 同步选择批次`);
   for (const name of MODELS) series[name] = p.models[name]?.daily || [];
   const maps = Object.fromEntries(Object.entries(series).map(([name, rows]) => [name, new Map(rows.map(r => [r.date, r]))]));
-  const dates = [...new Set(MODELS.flatMap(m => series[m].map(r => r.date)))].sort();
-  const max = Math.max(1, ...Object.values(series).flatMap(rows => rows.map(r => r[key])).filter(number));
+  const max = Math.max(1, ...Object.values(series).flatMap(rows => rows.filter(r => dates.includes(r.date)).map(r => r[key])).filter(number));
   const root = $("daily-content"); root.replaceChildren();
-  if (!dates.length) { root.append(element("div", {class: "empty-inline"}, "尚无可用日指标")); return; }
   for (const day of dates) {
     const col = element("div", {class: "day-column"}), bars = element("div", {class: "day-bars"}), values = element("div", {class: "day-values"});
-    let partial = false;
+    const obsStatus = observationStatus(day, number(maps.observations.get(day)?.[key]));
     for (const name of ["observations", ...MODELS]) {
       const row = maps[name].get(day), v = row?.[key], incomplete = row?.status === "partial";
       const wrap = element("div", {class: "day-bar-wrap"});
-      if (incomplete) partial = true;
-      const text = `${NAMES[name]}：${value(v)}${number(v) ? " μg/m³" : ""}${incomplete ? "（部分时段）" : ""}`;
+      const text = `${NAMES[name]}：${value(v)}${number(v) ? " μg/m³" : name === "observations" ? `（${obsStatus}）` : "（无有效预报）"}${incomplete && number(v) ? "（部分时段）" : ""}`;
       if (number(v)) { const bar = element("div", {class: `day-bar ${name}${incomplete ? " partial" : ""}`, title: text}); bar.style.height = `${Math.max(1, v / max * 95)}%`; wrap.append(bar); }
-      bars.append(wrap); values.append(element("span", {class: name, title: text, "aria-label": text}, `${value(v)}${incomplete ? "*" : ""}`));
+      bars.append(wrap);
+      values.append(element("span", {class: name, title: text, "aria-label": text}, name === "observations" && !number(v) ? obsStatus : `${value(v)}${incomplete && number(v) ? "*" : ""}`));
     }
-    const obsStatus = maps.observations.get(day)?.status;
-    const status = obsStatus === "current" ? "观测统计中" : partial ? "部分时段*" : obsStatus === "future" ? "等待观测" : "";
-    col.append(bars, element("div", {class: "day-label"}, day.slice(5).replace("-", "/")), element("div", {class: "day-status"}, status), values); root.append(col);
+    col.append(bars, element("div", {class: "day-label", title: day}, day.slice(5).replace("-", "/")), element("div", {class: "day-status"}, `第 ${dates.indexOf(day) + 1} 天`), values); root.append(col);
   }
 }
 function renderEvaluation() {
-  const models = MODELS.filter(m => state.payload.models[m]);
-  const pairs = state.rows.filter(r => number(r.observations) && models.every(m => number(r[m])));
   const root = $("evaluation-content"); root.replaceChildren();
-  const summary = element("div", {class: "eval-summary"}); summary.append(element("strong", {}, models.length ? String(pairs.length) : "0"), element("span", {}, "个共同有效小时")); root.append(summary);
-  setText("evaluation-subtitle", `${state.pollutant === "pm25" ? "PM₂.₅" : "O₃"} · 当前显示时段 · ${models.length === 2 ? "双模型共同样本" : "可用模型有效样本"}`);
-  if (!pairs.length || !models.length) { root.append(element("div", {class: "empty-inline"}, "观测尚未覆盖有效预报，误差暂不计算。")); return; }
+  const dates = cycleDays(), start = new Date(`${dates[0]}T01:00:00+08:00`).getTime();
+  const end = new Date(`${dates[6]}T00:00:00+08:00`).getTime() + 24 * HOUR;
+  const candidates = rowsForChart(true).filter(r => r.time >= start && r.time <= end);
+  const models = MODELS.filter(m => state.payload.models[m]);
+  const pairs = models.length ? candidates.filter(r => number(r.observations) && models.every(m => number(r[m]))) : [];
+  const summary = element("div", {class: "eval-summary"});
+  summary.append(element("strong", {}, String(pairs.length)), element("span", {}, models.length === 2 ? "个共同有效小时 / 168 小时" : "个有效小时 / 168 小时")); root.append(summary);
+  setText("evaluation-subtitle", `${state.pollutant === "pm25" ? "PM₂.₅" : "O₃"} · ${dates[0]} — ${dates[6]} · ${models.length === 2 ? "双模型共同样本" : "可用模型有效样本"}`);
+  if (!pairs.length) root.append(element("div", {class: "empty-inline"}, "所选起报的七天范围内尚无有效预报与观测配对，可切换历史起报查看。"));
   const table = element("table", {class: "eval-table"}), head = element("thead"), header = element("tr"), body = element("tbody");
   for (const title of ["模型", "MAE", "RMSE", "偏差"]) header.append(element("th", {scope: "col"}, title));
   head.append(header); table.append(head, body);
   for (const name of models) {
     const errors = pairs.map(r => r[name] - r.observations);
-    const mae = errors.reduce((s, v) => s + Math.abs(v), 0) / errors.length;
-    const rmse = Math.sqrt(errors.reduce((s, v) => s + v * v, 0) / errors.length);
-    const bias = errors.reduce((s, v) => s + v, 0) / errors.length;
+    const mae = errors.length ? errors.reduce((s, v) => s + Math.abs(v), 0) / errors.length : null;
+    const rmse = errors.length ? Math.sqrt(errors.reduce((s, v) => s + v * v, 0) / errors.length) : null;
+    const bias = errors.length ? errors.reduce((s, v) => s + v, 0) / errors.length : null;
     const row = element("tr"), label = element("td"); label.append(element("i", {class: `model-chip ${name}`}), document.createTextNode(NAMES[name]));
     row.append(label, element("td", {}, value(mae)), element("td", {}, value(rmse)), element("td", {}, `${bias > .05 ? "+" : ""}${value(bias)}`)); body.append(row);
   }
-  root.append(table, element("p", {class: "unit"}, `${stamp(pairs[0].time)} — ${stamp(pairs[pairs.length - 1].time)} · 单位 μg/m³`));
+  root.append(table);
+  const daily = element("div", {class: "evaluation-days"});
+  for (const day of dates) {
+    const count = pairs.filter(r => beijingDay(r.time - HOUR) === day).length;
+    const card = element("div");
+    const today = beijingDay(Date.now());
+    const status = day > today ? "待观测" : day === today ? "持续更新" : count ? "已配对" : "无有效配对";
+    card.append(element("span", {}, day.slice(5).replace("-", "/")), element("strong", {}, `${count} / 24`), element("small", {}, status));
+    daily.append(card);
+  }
+  root.append(daily, element("p", {class: "unit"}, "逐日共同有效小时数；当日已到达的小时观测参与评估，未来观测到达后自动补充。"));
+  if (pairs.length) root.append(element("p", {class: "unit"}, `有效样本 ${stamp(pairs[0].time, true)} — ${stamp(pairs[pairs.length - 1].time, true)} · 单位 μg/m³`));
 }
 function renderPayload() {
   const p = state.payload;
@@ -240,9 +263,10 @@ function renderPayload() {
   const maxHours = Math.max(0, ...entries.map(m => p.models[m].coverage?.hours || 0));
   setText("horizon-value", maxHours || "—");
   setText("horizon-detail", entries.map(m => `${NAMES[m]} ${p.models[m].coverage?.hours ?? "—"}h`).join(" / "));
-  setText("cycle-note", entries.map(m => `${NAMES[m]} · 第 ${p.models[m].revision} 版`).join("　/　"));
+  setText("cycle-note", `01—03 同步批次 · ${entries.map(m => `${NAMES[m]} 第 ${p.models[m].revision} 版`).join(" / ")}`);
   state.rows = rowsForChart();
   renderChart(); renderTable(); renderDaily(); renderEvaluation();
+  queueNavigation();
   $("figure-open").disabled = !p.figure;
   if ($("figure-dialog").open) showFigure();
 }
@@ -293,7 +317,7 @@ async function refresh(reason = "timer") {
   } catch (error) {
     if (epoch !== state.epoch) return;
     const text = error.name === "AbortError" ? "读取超时，稍后自动重试" : error.message || "暂时无法连接数据服务";
-    connection("连接暂缓 · 等待重试", true);
+    connection("连接失败 · 等待重试", true);
     notice(`${text}。${state.payload ? `当前保留 ${stamp(state.payload.init_time, true)} 起报的上次数据。` : window.HZFDataSource.isStatic ? "页面会自动重试，请稍后查看。" : "请保持 SSH 转发或组内网络连接，页面会自动重试。"}`);
     if (!state.payload) setText("chart-empty", "暂未取得数据，请稍候或点击右上角刷新。");
   } finally {
@@ -303,7 +327,11 @@ async function refresh(reason = "timer") {
 }
 
 $("refresh").addEventListener("click", () => refresh("manual"));
-$("cycle").addEventListener("change", (event) => { state.cycle = event.target.value; refresh("cycle"); });
+document.querySelectorAll("[data-cycle]").forEach(select => select.addEventListener("change", event => {
+  state.cycle = event.target.value;
+  document.querySelectorAll("[data-cycle]").forEach(other => { other.value = state.cycle; });
+  refresh("cycle");
+}));
 document.querySelectorAll("[data-pollutant]").forEach(button => button.addEventListener("click", () => {
   state.pollutant = button.dataset.pollutant;
   document.querySelectorAll("[data-pollutant]").forEach(b => { const selected = b === button; b.classList.toggle("selected", selected); b.setAttribute("aria-pressed", String(selected)); });
@@ -312,7 +340,7 @@ document.querySelectorAll("[data-pollutant]").forEach(button => button.addEventL
 document.querySelectorAll("[data-range]").forEach(button => button.addEventListener("click", () => {
   state.range = button.dataset.range;
   document.querySelectorAll("[data-range]").forEach(b => { const selected = b === button; b.classList.toggle("selected", selected); b.setAttribute("aria-pressed", String(selected)); });
-  if (state.payload) { state.rows = rowsForChart(); renderChart(); renderTable(); renderEvaluation(); }
+  if (state.payload) { state.rows = rowsForChart(); renderChart(); renderTable(); }
 }));
 document.querySelectorAll("[data-series]").forEach(button => button.addEventListener("click", () => {
   const name = button.dataset.series;
@@ -337,14 +365,28 @@ $("figure-dialog").addEventListener("click", e => { if (e.target === $("figure-d
 const navLinks = [...document.querySelectorAll(".sidebar nav a")];
 const sections = navLinks.map(a => document.querySelector(a.getAttribute("href")));
 let scrollQueued = false;
-window.addEventListener("scroll", () => {
+function updateNavigation() {
+  const offset = window.innerWidth <= 700 ? 110 : 100;
+  let active = sections[0];
+  for (const section of sections) if (section.getBoundingClientRect().top <= offset) active = section;
+  if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 5) active = sections[sections.length - 1];
+  navLinks.forEach(a => {
+    const selected = a.getAttribute("href") === `#${active.id}`;
+    a.classList.toggle("active", selected);
+    if (selected) a.setAttribute("aria-current", "location"); else a.removeAttribute("aria-current");
+  });
+}
+function queueNavigation() {
   if (scrollQueued) return; scrollQueued = true;
   requestAnimationFrame(() => {
     scrollQueued = false;
-    let active = sections[0]; for (const section of sections) if (section.getBoundingClientRect().top < 180) active = section;
-    navLinks.forEach(a => a.classList.toggle("active", a.getAttribute("href") === `#${active.id}`));
+    updateNavigation();
   });
-}, {passive: true});
+}
+window.addEventListener("scroll", queueNavigation, {passive: true});
+window.addEventListener("resize", queueNavigation, {passive: true});
+window.addEventListener("hashchange", queueNavigation);
+updateNavigation();
 let resizeTimer;
 new ResizeObserver(() => { clearTimeout(resizeTimer); resizeTimer = setTimeout(renderChart, 120); }).observe($("hourly-chart").parentElement);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) refresh("timer"); });
