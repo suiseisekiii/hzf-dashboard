@@ -1,6 +1,6 @@
 kind,key,value,cycle,init_time,source,revision,generated_at,start,end,hours,version,url,updated_at,station_id,name,longitude,latitude,time,pm25,o3,pm25_count,o3_count
 meta,schema_version,1,,,,,,,,,,,,,,,,,,,,
-meta,generated_at,2026-10-29T21:42:02+08:00,,,,,,,,,,,,,,,,,,,,
+meta,generated_at,2026-10-29T22:01:15+08:00,,,,,,,,,,,,,,,,,,,,
 meta,timezone,Asia/Shanghai,,,,,,,,,,,,,,,,,,,,
 meta,selected_source,fastforecast,,,,,,,,,,,,,,,,,,,,
 meta,latest_observation_time,2026-10-29T21:00:00+08:00,,,,,,,,,,,,,,,,,,,,
@@ -16,7 +16,6 @@ station,,,,,,,,,,,,,,330100057,云栖,120.0883,30.1808,,,,,
 station,,,,,,,,,,,,,,330100064,镇二中(新增200113),119.9464,30.0494,,,,,
 station,,,,,,,,,,,,,,330100065,市府大楼(新增200113),119.7183,30.2367,,,,,
 station,,,,,,,,,,,,,,330100067,消防大队(并行145),120.1556,30.2864,,,,,
-recent_observation,,,,,,,,,,,,,,,,,,2026-10-27T22:00:00+08:00,12.666666666666666,49.5,12,12
 recent_observation,,,,,,,,,,,,,,,,,,2026-10-27T23:00:00+08:00,11.583333333333334,44.333333333333336,12,12
 recent_observation,,,,,,,,,,,,,,,,,,2026-10-28T00:00:00+08:00,11.333333333333334,43.25,12,12
 recent_observation,,,,,,,,,,,,,,,,,,2026-10-28T01:00:00+08:00,10.5,44.583333333333336,12,12
