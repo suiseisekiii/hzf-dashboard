@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#193f35">
+  <meta name="hzf-data-source" content="static">
+  <title>杭州空气质量预报与观测</title>
+  <meta name="description" content="杭州空气质量观测、ProNet 与 FastForecast 预报对比。">
+  <link rel="icon" href="./favicon.svg?v=670f98d74b3c2dceb98ac730677c2f3384e36bfd4bc9c604ba014d80af8c5859" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css?v=ebfc52f9be1ff923430017e91ef9f14dc128bcbb40ee6ce86d016e6afebbe44c">
+  <script src="./data-source.js?v=f044174eee0b522d982f77181a55c3a8259b4d94fa2ab970c2b13badf858fd02" defer></script>
+  <script src="./app.js?v=f74726075421147a5a9a8b8694784d85394f50fb6d9c896ed4d924296677e265" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">跳至数据看板</a>
+  <aside class="sidebar">
+    <a href="#overview" class="brand"><span class="seal">杭</span><span>杭州空气质量<small>预报与观测</small></span></a>
+    <div class="nav-label">AIR QUALITY MONITORING</div>
+    <nav aria-label="看板导航">
+      <a href="#overview" class="active" aria-current="location"><span aria-hidden="true">◫</span>城市概览</a>
+      <a href="#hourly"><span aria-hidden="true">⌁</span>逐时预报<span class="nav-index">01</span></a>
+      <a href="#daily"><span aria-hidden="true">▥</span>七天日指标<span class="nav-index">02</span></a>
+      <a href="#evaluation"><span aria-hidden="true">◎</span>预报评估<span class="nav-index">03</span></a>
+      <a href="#stations"><span aria-hidden="true">⁙</span>站点观测<span class="nav-index">04</span></a>
+    </nav>
+    <div class="sidebar-note"><span class="leaf" aria-hidden="true">↗</span><p>空气质量<br>监测与评估</p><small>国控站观测数据<br>双模型预报对比</small></div>
+    <div class="sidebar-footer"><span class="dot"></span>公开观测台<small>所有时间均为北京时间 UTC+8</small></div>
+  </aside>
+
+  <main id="main">
+    <header class="topbar"><div class="breadcrumb">杭州 <span>/</span> 空气质量 <span>/</span> 观测与预报</div><div class="top-actions"><span id="connection" class="connection" role="status"><span class="dot"></span>正在连接数据</span><button id="refresh" class="icon-button" title="立即刷新数据" aria-label="立即刷新数据">↻</button></div></header>
+    <div class="page-content">
+      <section id="overview" class="hero">
+        <div class="hero-copy"><div class="eyebrow"><span></span> HANGZHOU · AIR QUALITY</div><h1>杭州空气质量<br><em>预报与观测</em></h1><p>PM₂.₅、O₃ 浓度监测及预报效果评估<br>杭州国控站观测 · ProNet / FastForecast 模型对比</p><div class="hero-foot"><span id="today">北京时间</span><span class="hero-rule"></span><span>小时浓度 · 七天日指标 · 预报评估</span></div></div>
+        <svg class="landscape" viewBox="0 0 580 300" aria-hidden="true"><defs><linearGradient id="hill" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#b2c5ad" stop-opacity=".65"/><stop offset="1" stop-color="#f3f2e9" stop-opacity="0"/></linearGradient></defs><circle cx="396" cy="91" r="45" fill="#d8b56d" opacity=".52"/><circle cx="396" cy="91" r="61" fill="none" stroke="#d8b56d" opacity=".3"/><path d="M0 224Q62 164 108 183T193 153T282 164T365 125T478 171T580 145V300H0Z" fill="url(#hill)"/><path d="M10 238Q103 161 167 209T284 178T399 193T580 165" fill="none" stroke="#86a58c" stroke-width="1.4"/><path d="M42 258Q145 198 234 238T386 220T580 232M0 278Q132 237 251 265T444 260T590 268" fill="none" stroke="#86a58c" opacity=".5"/><g fill="none" stroke="#b3bdb0" opacity=".6"><path d="M30 89H211Q241 89 241 68T224 47M104 111H279Q310 111 310 93M466 42H547M487 55H568M345 283H489"/></g><g fill="#527561"><circle cx="193" cy="200" r="4"/><circle cx="282" cy="178" r="3"/><circle cx="399" cy="193" r="4"/></g><g stroke="#527561" fill="none" opacity=".3"><circle cx="193" cy="200" r="11"/><circle cx="399" cy="193" r="13"/></g><text x="375" y="293" fill="#6e806e" font-family="monospace" font-size="9" letter-spacing="2">30° N / 120° E</text></svg>
+      </section>
+
+      <div id="notice" class="notice" role="status" hidden></div>
+      <section class="stats" aria-label="最新城市观测">
+        <article class="stat-card"><div class="stat-top"><span>PM₂.₅ · 最新观测</span><span class="stat-symbol">◌</span></div><div class="stat-value"><strong id="pm-value">—</strong><span>μg/m³</span></div><div class="stat-bottom" id="pm-detail">等待真实观测数据</div><svg id="pm-spark" class="spark" viewBox="0 0 140 40" aria-hidden="true"></svg></article>
+        <article class="stat-card"><div class="stat-top"><span>O₃ · 最新观测</span><span class="stat-symbol">◉</span></div><div class="stat-value"><strong id="o3-value">—</strong><span>μg/m³</span></div><div class="stat-bottom" id="o3-detail">等待真实观测数据</div><svg id="o3-spark" class="spark" viewBox="0 0 140 40" aria-hidden="true"></svg></article>
+        <article class="stat-card"><div class="stat-top"><span>当前起报 · 有效预报</span><span class="stat-symbol">↗</span></div><div class="stat-value"><strong id="horizon-value">—</strong><span>小时</span></div><div class="stat-bottom" id="horizon-detail">按 MAT 实际有效时效统计</div></article>
+        <article class="stat-card dark"><div class="stat-top"><span>杭州国控站</span><span class="stat-symbol">⁙</span></div><div class="stat-value"><strong id="station-count">—</strong><span>站</span></div><div class="stat-bottom" id="station-detail">最新观测按站号对齐</div></article>
+      </section>
+
+      <section class="workspace-toolbar" aria-label="预报选择"><div class="cycle-control"><label for="cycle">起报时间</label><select id="cycle" data-cycle disabled><option>正在读取批次…</option></select></div><div class="segmented pollutant-switch" role="group" aria-label="污染物"><button data-pollutant="pm25" aria-pressed="true" class="selected">PM₂.₅</button><button data-pollutant="o3" aria-pressed="false">O₃</button></div><div class="toolbar-note" id="cycle-note">起报选择同步应用于 01—03 板块</div></section>
+
+      <section class="panel" id="hourly">
+        <div class="panel-head"><div><div class="section-kicker">01 / HOURLY FORECAST</div><h2>逐小时预报与观测</h2><p id="hourly-subtitle">逐小时城市浓度 · 缺测留空，不连接缺口</p></div><div class="segmented range-switch" role="group" aria-label="展示时长"><button data-range="72" aria-pressed="false">72 小时</button><button data-range="168" aria-pressed="false">7 天</button><button data-range="all" class="selected" aria-pressed="true">全部时效</button></div></div>
+        <div class="chart-meta"><div class="legend" role="group" aria-label="显示曲线"><button data-series="observations" aria-pressed="true"><i class="legend-dot obs"></i>实况观测</button><button data-series="pronet" aria-pressed="true"><i class="legend-line pronet"></i>ProNet</button><button data-series="fastforecast" aria-pressed="true"><i class="legend-line fastforecast"></i>FastForecast</button></div><span class="unit">浓度 / μg·m⁻³</span></div>
+        <div class="chart-wrap"><svg id="hourly-chart" viewBox="0 0 1100 320" role="img" aria-label="逐小时预报与观测对比图"></svg><div id="chart-tooltip" class="chart-tooltip" hidden></div><div id="chart-empty" class="empty-chart">正在读取真实预报与观测…</div></div>
+        <div class="chart-bottom"><span id="coverage-note">预报时间由模型 time + leadTimes 解析</span><button class="text-button" id="figure-open" disabled>查看原始组图 <span aria-hidden="true">↗</span></button></div>
+        <details class="data-details"><summary>查看小时数据表</summary><div class="table-scroll"><table><caption>当前起报、污染物与展示时段的城市浓度，单位 μg/m³。</caption><thead><tr><th scope="col">北京时间</th><th scope="col">观测</th><th scope="col">ProNet</th><th scope="col">FastForecast</th></tr></thead><tbody id="hourly-table"></tbody></table></div></details>
+      </section>
+
+      <section class="panel daily-panel" id="daily">
+        <div class="panel-head"><div><div class="section-kicker">02 / DAILY INDICATORS</div><h2 id="daily-heading">七天 PM₂.₅ 日平均浓度</h2><p id="daily-subtitle">所选起报次日起连续七天 · 与 01 共用起报选择</p></div></div>
+        <div class="chart-meta"><div class="legend" role="group" aria-label="显示日指标"><button data-series="observations" aria-pressed="true"><i class="legend-dot obs"></i>实况观测</button><button data-series="pronet" aria-pressed="true"><i class="legend-line pronet"></i>ProNet</button><button data-series="fastforecast" aria-pressed="true"><i class="legend-line fastforecast"></i>FastForecast</button></div><span class="unit">浓度 / μg·m⁻³</span></div>
+        <div class="daily-scroll"><div id="daily-content" class="daily-content"><div class="empty-inline">等待日指标…</div></div></div>
+        <div class="panel-foot">日统计采用北京时间小时结束标签 01—24 时。PM₂.₅ 为日平均浓度，O₃ 为日最大 8 小时平均浓度。当日标记“统计中”，未来日期标记“待观测”；历史有效数据不足时标记“缺测”。“*”表示源数据未覆盖完整日时间位置。</div>
+      </section>
+
+      <section class="panel evaluation-panel" id="evaluation">
+        <div class="panel-head"><div><div class="section-kicker">03 / FORECAST EVALUATION</div><h2>七天预报效果评估</h2><p id="evaluation-subtitle">所选起报次日起连续七天 · 共同有效小时样本</p></div></div>
+        <div id="evaluation-content"><div class="empty-inline">观测到达后计算有效样本</div></div>
+        <div class="evaluation-note"><span>评估口径</span><p>与 02 使用同一起报、同一七天日期范围，按有效时间匹配当前已保存的小时观测，不受 01 展示时长选项影响。两模型均有该起报批次时，使用双方和观测均有效的共同样本；仅有一个模型时单独统计。MAE、RMSE 越小表示误差越小，偏差为预报减观测。单位均为 μg/m³。选择历史起报可查看已到达观测的完整评估过程。</p></div>
+      </section>
+
+      <section class="panel stations-panel" id="stations"><div class="panel-head"><div><div class="section-kicker">04 / OBSERVATION NETWORK</div><h2>国控站最新观测</h2><p id="station-time">最新站点观测 · 与起报批次选择无关</p></div><span class="badge" id="station-valid">杭州 · 国控站</span></div><div id="station-grid" class="station-grid"><div class="empty-inline">等待站点观测…</div></div></section>
+
+      <footer class="page-footer"><div><span class="footer-brand">杭州空气质量预报与观测</span><p>观测数据、模型预报及效果评估结果</p></div><div class="footer-notes"><span id="refresh-time">页面尚未取得数据</span><span>每 30 秒检查 · 数据变化后自动发布，发布可能延迟</span><details><summary>数据与计算说明</summary><p>预报与观测均复用项目现有指标函数。城市小时浓度、PM₂.₅ 日均及 O₃ 日最大 8 小时均值按现有有效站点与小时数要求计算。日统计采用小时结束标签 01—24 时；当日观测日指标尚未完成，不参与日指标展示。01—03 同步选择起报批次，02/03 固定展示起报次日起七天。逐时预报展示 MAT 中的实际有效时效，NaN 占位不计入覆盖。组图沿用项目已有 7 天窗口。</p></details></div></footer>
+    </div>
+  </main>
+  <dialog id="figure-dialog"><div class="dialog-head"><div><strong>预报与观测组图</strong><span id="figure-info"></span></div><button id="figure-close" class="icon-button" aria-label="关闭组图">×</button></div><div id="figure-error" class="notice" hidden>组图暂时无法读取，请稍后再试。</div><img id="figure-image" alt="当前起报的 PM₂.₅、O₃ 预报与观测组图"><div class="dialog-foot"><a id="figure-download" class="text-button" download>下载组图 ↓</a><span>组图使用已有绘图任务产物</span></div></dialog>
+</body>
+</html>
