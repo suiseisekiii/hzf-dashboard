@@ -31,7 +31,8 @@ jobs:
         run: |
           mkdir public
           cp index.html app.js data-source.js styles.css favicon.svg .nojekyll public/
-          cp -R data figures public/
+          cp -R data public/
+          if [ -d figures ]; then cp -R figures public/; fi
       - uses: actions/upload-pages-artifact@v4
         with:
           path: public

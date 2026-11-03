@@ -4,7 +4,6 @@
 window.HZFDataSource = (() => {
   const isStatic = document.querySelector('meta[name="hzf-data-source"]')?.content === "static";
   const base = new URL("./", document.baseURI);
-  const MODELS = ["pronet", "fastforecast"];
   const cycleCache = new Map();
   const numeric = v => v === "" || v === undefined ? null : Number(v);
   const counts = r => ({pm25: Number(r.pm25_count || 0), o3: Number(r.o3_count || 0)});
@@ -69,8 +68,20 @@ window.HZFDataSource = (() => {
     }
     const latest = rows.find(r => r.kind === "latest_observation");
     const stationRows = new Map(rows.filter(r => r.kind === "station_observation").map(r => [r.station_id, r]));
+    const model_names = Object.fromEntries(rows.filter(r => r.kind === "model_name").map(r => [r.key, r.value]));
+    const delivery = {hour: null, day: null};
+    for (const kind of ["hour", "day"]) {
+      const header = rows.find(r => r.kind === "delivery" && r.key === kind);
+      if (!header) continue;
+      delivery[kind] = {period: header.name, cycle: header.cycle, due_at: header.time,
+        accepted_at: header.updated_at, predict_time: header.init_time, status: header.value,
+        components: Object.fromEntries(rows.filter(r => r.kind === "delivery_component" && r.key === kind)
+          .map(r => [r.name, {model: r.source, revision: numeric(r.revision), preferred_source: r.value}])),
+        data: rows.filter(r => r.kind === "delivery_record" && r.key === kind)
+          .map(r => ({forecast_time: r.time, pm2_5: numeric(r.pm25), o3: numeric(r.o3)}))};
+    }
     return {schema_version: 1, generated_at: meta.generated_at, timezone: meta.timezone, stale: false,
-      selected_source: meta.selected_source, latest_observation_time: meta.latest_observation_time || null,
+      model_names, delivery, selected_source: meta.selected_source, latest_observation_time: meta.latest_observation_time || null,
       station_count: stations.length, stations, cycles,
       observations: {hourly: rows.filter(r => r.kind === "recent_observation").map(hourly),
         latest_hourly: latest ? hourly(latest) : null,
@@ -91,7 +102,7 @@ window.HZFDataSource = (() => {
       while (cycleCache.size > 16) cycleCache.delete(cycleCache.keys().next().value);
     }
     const models = {};
-    for (const name of MODELS) if (entry.models[name]) models[name] = {...entry.models[name],
+    for (const [name, model] of Object.entries(entry.models)) models[name] = {...model,
       hourly: rows.filter(r => r.source === name && r.kind === "hour").map(hourly),
       daily: rows.filter(r => r.source === name && r.kind === "day").map(daily)};
     const observed = rows.filter(r => r.source === "observations");

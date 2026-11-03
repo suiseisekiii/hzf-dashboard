@@ -2,13 +2,17 @@
 
 const $ = (id) => document.getElementById(id);
 const NS = "http://www.w3.org/2000/svg";
-const MODELS = ["pronet", "fastforecast"];
-const NAMES = {observations: "实况观测", pronet: "ProNet", fastforecast: "FastForecast"};
-const COLORS = {observations: "#929b8c", pronet: "#5b85a0", fastforecast: "#c78c52"};
+const COLORS = {observations: "#929b8c", pronet: "#5b85a0", pronet_15km_noncoupleh: "#7862a8",
+  pronet_9km_coupleh: "#288070", pronet_9km_noncoupleh: "#ae527d", fastforecast: "#c78c52"};
 const HOUR = 3600000;
 const number = (v) => typeof v === "number" && Number.isFinite(v);
 const value = (v) => number(v) ? v.toFixed(1) : "—";
-const state = {catalog: null, payload: null, cycle: null, pollutant: "pm25", range: "all", visible: new Set(["observations", ...MODELS]), epoch: 0, busy: false, abort: null, rows: [], cursor: 0};
+const state = {catalog: null, payload: null, cycle: null, pollutant: "pm25", range: "all", hiddenSeries: new Set(), epoch: 0, busy: false, abort: null, rows: [], cursor: 0};
+function modelIds() { return Object.keys(state.payload?.models || {}); }
+function seriesName(id) {
+  if (id === "observations") return "实况观测";
+  return state.catalog?.model_names?.[id] || ({pronet: "ProNet 15 km CoupleH", fastforecast: "FastForecast"})[id] || id;
+}
 const dateFormatter = new Intl.DateTimeFormat("zh-CN", {timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23"});
 const fullFormatter = new Intl.DateTimeFormat("zh-CN", {timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23"});
 const hourFormatter = new Intl.DateTimeFormat("zh-CN", {timeZone: "Asia/Shanghai", month: "2-digit", day: "2-digit", hour: "2-digit", hourCycle: "h23"});
@@ -62,7 +66,64 @@ function renderOverview() {
   }
   setText("station-count", c.station_count ?? "—");
   setText("station-detail", c.latest_observation_time ? `观测更新至 ${stamp(c.latest_observation_time)}` : "等待观测数据");
+  const product = c.delivery?.hour;
+  setText("horizon-value", product?.status === "accepted" ? product.data.length : "—");
+  setText("horizon-detail", product ? `${stamp(product.due_at)} 提交时段` : "暂无小时上传归档");
+  renderDelivery("hour", product);
+  renderDelivery("day", c.delivery?.day);
   renderStations();
+}
+function renderDelivery(kind, product) {
+  const section = $("delivery-" + kind);
+  const heading = kind === "hour" ? "小时预报" : "日预报";
+  section.querySelector("h3").textContent = heading;
+  const meta = section.querySelector(".delivery-meta"), scroll = section.querySelector(".table-scroll");
+  const body = section.querySelector("tbody");
+  meta.replaceChildren();
+  if (!product) {
+    meta.textContent = `暂无已受理的${heading}`;
+    body.replaceChildren(); scroll.hidden = true;
+    return;
+  }
+  const times = [`提交时段 ${stamp(product.due_at, true)}`, `受理 ${stamp(product.accepted_at, true)}`];
+  if (product.predict_time) times.push(`起报 ${stamp(product.predict_time, true)}`);
+  meta.append(element("p", {}, times.join(" · ")));
+  if (product.status !== "accepted") {
+    meta.append(element("p", {}, "该时段已受理，上传归档暂不可读。"));
+    body.replaceChildren(); scroll.hidden = true;
+    return;
+  }
+  const sources = [["pm25", "PM₂.₅"], ["o3", "O₃"]].map(([key, name]) => {
+    const info = product.components?.[key];
+    if (!info?.model) return `${name} 来源未记录`;
+    const revision = info.revision == null ? "" : ` · r${info.revision}`;
+    return `${name}：${seriesName(info.model)}${revision}`;
+  });
+  meta.append(element("p", {}, sources.join("　/　")));
+  const data = product.data;
+  section.querySelector("h3").textContent = `${heading} · ${data.length} ${kind === "hour" ? "小时" : "天"}`;
+  const fragment = document.createDocumentFragment();
+  for (const record of data) {
+    const row = element("tr");
+    row.append(element("td", {}, kind === "hour" ? stamp(record.forecast_time, true) : record.forecast_time),
+      element("td", {}, record.pm2_5 ?? "—"), element("td", {}, record.o3 ?? "—"));
+    fragment.append(row);
+  }
+  body.replaceChildren(fragment); scroll.hidden = false;
+}
+function renderSeriesControls() {
+  const names = ["observations", ...modelIds()];
+  for (const legend of document.querySelectorAll(".reference-legend")) {
+    legend.replaceChildren(...names.map(name => {
+      const button = element("button", {"data-series": name, "aria-pressed": String(!state.hiddenSeries.has(name))});
+      const mark = element("i", {class: name === "observations" ? "legend-dot" : `legend-line ${name}`});
+      if (name !== "fastforecast") mark.style.backgroundColor = COLORS[name];
+      button.append(mark, document.createTextNode(seriesName(name)));
+      return button;
+    }));
+  }
+  $("reference-columns").replaceChildren(...["北京时间", ...names.map(seriesName)].map(label =>
+    element("th", {scope: "col"}, label)));
 }
 function renderCycles() {
   const select = $("cycle");
@@ -94,8 +155,9 @@ function rowsForChart(full = false) {
   const p = state.payload;
   if (!p) return [];
   const series = {observations: p.observations?.hourly || []};
-  for (const m of MODELS) series[m] = p.models[m]?.hourly || [];
-  const predictionTimes = MODELS.flatMap(m => series[m].map(r => new Date(r.valid_time).getTime())).filter(Number.isFinite);
+  const models = modelIds();
+  for (const m of models) series[m] = p.models[m].hourly || [];
+  const predictionTimes = models.flatMap(m => series[m].map(r => new Date(r.valid_time).getTime())).filter(Number.isFinite);
   if (!predictionTimes.length) return [];
   const start = Math.min(...predictionTimes), end = Math.min(Math.max(...predictionTimes), full || state.range === "all" ? Infinity : start + (Number(state.range) - 1) * HOUR);
   const maps = Object.fromEntries(Object.entries(series).map(([name, rows]) => [name, new Map(rows.map(r => [new Date(r.valid_time).getTime(), r]))]));
@@ -115,7 +177,7 @@ let chartGeometry = null;
 function renderChart() {
   const root = $("hourly-chart"); root.replaceChildren(); $("chart-tooltip").hidden = true;
   const rows = state.rows;
-  const names = ["observations", ...MODELS].filter(m => state.visible.has(m));
+  const names = ["observations", ...modelIds()].filter(m => !state.hiddenSeries.has(m));
   const vals = rows.flatMap(r => names.map(m => r[m])).filter(number);
   $("chart-empty").hidden = Boolean(vals.length);
   setText("chart-empty", !rows.length ? "该批次暂无可展示的有效预报" : !names.length ? "点击图例，选择要显示的曲线" : "当前选择尚无有效数据");
@@ -146,12 +208,12 @@ function renderChart() {
     const ix = ticks ? Math.round(i / ticks * (rows.length - 1)) : 0;
     root.append(svg("text", {x: x(ix), y: h - 12, fill: "#96a18c", "font-size": w < 500 ? 8 : 9, "text-anchor": i === 0 ? "start" : i === ticks ? "end" : "middle"}, hourFormatter.format(new Date(rows[ix].time))));
   }
-  if (state.visible.has("observations")) {
+  if (!state.hiddenSeries.has("observations")) {
     const width = Math.max(1.1, Math.min(5, (w - left - right) / rows.length * .6));
     rows.forEach((r, i) => { if (number(r.observations)) root.append(svg("rect", {x: x(i) - width / 2, y: y(r.observations), width, height: Math.max(1, y(0) - y(r.observations)), fill: COLORS.observations, opacity: .42, rx: .5})); });
   }
-  for (const model of MODELS) {
-    if (!state.visible.has(model)) continue;
+  for (const model of modelIds()) {
+    if (state.hiddenSeries.has(model)) continue;
     root.append(svg("path", {d: paths(rows, x, y, model), fill: "none", stroke: COLORS[model], "stroke-width": 1.8, "stroke-linejoin": "round", "stroke-linecap": "round", "stroke-dasharray": model === "fastforecast" ? "5 3" : "none"}));
     rows.forEach((r, i) => { if (number(r[model]) && !number(rows[i - 1]?.[model]) && !number(rows[i + 1]?.[model])) root.append(svg("circle", {cx: x(i), cy: y(r[model]), r: 2, fill: COLORS[model]})); });
   }
@@ -166,11 +228,11 @@ function showCursor(index) {
   const r = g.rows[index], line = $("cursor-line"), tip = $("chart-tooltip");
   if (line) { line.setAttribute("x1", g.x(index)); line.setAttribute("x2", g.x(index)); line.setAttribute("visibility", "visible"); }
   tip.replaceChildren(element("b", {}, stamp(r.time, true)));
-  for (const name of ["observations", ...MODELS]) {
-    if (!state.visible.has(name)) continue;
+  for (const name of ["observations", ...modelIds()]) {
+    if (state.hiddenSeries.has(name)) continue;
     const row = element("div", {class: "tooltip-row"}), label = element("span");
     const mark = element("i", {class: "legend-dot"}); mark.style.background = COLORS[name];
-    label.append(mark, document.createTextNode(NAMES[name]));
+    label.append(mark, document.createTextNode(seriesName(name)));
     row.append(label, element("strong", {}, `${value(r[name])}${number(r[name]) ? ` · ${r.counts[name]}站` : ""}`)); tip.append(row);
   }
   tip.hidden = false;
@@ -183,7 +245,7 @@ function renderTable() {
   const body = $("hourly-table"), fragment = document.createDocumentFragment();
   for (const r of state.rows) {
     const row = element("tr"); row.append(element("td", {}, stamp(r.time, true)));
-    for (const name of ["observations", ...MODELS]) row.append(element("td", {}, value(r[name])));
+    for (const name of ["observations", ...modelIds()]) row.append(element("td", {}, value(r[name])));
     fragment.append(row);
   }
   body.replaceChildren(fragment);
@@ -201,13 +263,14 @@ function observationStatus(day, hasValue) {
 function renderDaily() {
   const p = state.payload, key = state.pollutant === "pm25" ? "pm25_daily_mean" : "o3_daily_max_8h_mean";
   const dates = cycleDays(), series = {observations: p.observations?.daily || []};
-  setText("daily-heading", state.pollutant === "pm25" ? "七天 PM₂.₅ 日平均浓度" : "七天 O₃ 日最大 8 小时平均浓度");
+  setText("daily-heading", state.pollutant === "pm25" ? "模型对比 · PM₂.₅ 日平均浓度" : "模型对比 · O₃ 日最大 8 小时平均浓度");
   setText("daily-subtitle", `${stamp(p.init_time, true)} 起报 · ${dates[0]} — ${dates[6]} · 与 01、03 同步选择批次`);
-  for (const name of MODELS) series[name] = p.models[name]?.daily || [];
+  for (const name of modelIds()) series[name] = p.models[name].daily || [];
   const maps = Object.fromEntries(Object.entries(series).map(([name, rows]) => [name, new Map(rows.map(r => [r.date, r]))]));
-  const names = ["observations", ...MODELS].filter(name => state.visible.has(name));
+  const names = ["observations", ...modelIds()].filter(name => !state.hiddenSeries.has(name));
   const max = Math.max(1, ...names.flatMap(name => series[name].filter(r => dates.includes(r.date)).map(r => r[key])).filter(number));
   const root = $("daily-content"); root.replaceChildren();
+  root.style.setProperty("--day-min-width", `${Math.max(73, names.length * 24)}px`);
   if (!names.length) { root.append(element("div", {class: "empty-inline"}, "点击图例，选择要显示的日指标")); return; }
   for (const day of dates) {
     const col = element("div", {class: "day-column"}), bars = element("div", {class: "day-bars"}), values = element("div", {class: "day-values"});
@@ -215,10 +278,15 @@ function renderDaily() {
     for (const name of names) {
       const row = maps[name].get(day), v = row?.[key], incomplete = row?.status === "partial";
       const wrap = element("div", {class: "day-bar-wrap"});
-      const text = `${NAMES[name]}：${value(v)}${number(v) ? " μg/m³" : name === "observations" ? `（${obsStatus}）` : "（无有效预报）"}${incomplete && number(v) ? "（部分时段）" : ""}`;
-      if (number(v)) { const bar = element("div", {class: `day-bar ${name}${incomplete ? " partial" : ""}`, title: text}); bar.style.height = `${Math.max(1, v / max * 95)}%`; wrap.append(bar); }
+      const text = `${seriesName(name)}：${value(v)}${number(v) ? " μg/m³" : name === "observations" ? `（${obsStatus}）` : "（无有效预报）"}${incomplete && number(v) ? "（部分时段）" : ""}`;
+      if (number(v)) {
+        const bar = element("div", {class: `day-bar ${name}${incomplete ? " partial" : ""}`, title: text});
+        bar.style.setProperty("--series-color", COLORS[name]);
+        bar.style.height = `${Math.max(1, v / max * 95)}%`; wrap.append(bar);
+      }
       bars.append(wrap);
-      values.append(element("span", {class: name, title: text, "aria-label": text}, name === "observations" && !number(v) ? obsStatus : `${value(v)}${incomplete && number(v) ? "*" : ""}`));
+      const measure = element("span", {title: text, "aria-label": text}, name === "observations" && !number(v) ? obsStatus : `${value(v)}${incomplete && number(v) ? "*" : ""}`);
+      measure.style.color = COLORS[name]; values.append(measure);
     }
     col.append(bars, element("div", {class: "day-label", title: day}, day.slice(5).replace("-", "/")), element("div", {class: "day-status"}, `第 ${dates.indexOf(day) + 1} 天`), values); root.append(col);
   }
@@ -228,11 +296,11 @@ function renderEvaluation() {
   const dates = cycleDays(), start = new Date(`${dates[0]}T01:00:00+08:00`).getTime();
   const end = new Date(`${dates[6]}T00:00:00+08:00`).getTime() + 24 * HOUR;
   const candidates = rowsForChart(true).filter(r => r.time >= start && r.time <= end);
-  const models = MODELS.filter(m => state.payload.models[m]);
+  const models = modelIds();
   const pairs = models.length ? candidates.filter(r => number(r.observations) && models.every(m => number(r[m]))) : [];
   const summary = element("div", {class: "eval-summary"});
-  summary.append(element("strong", {}, String(pairs.length)), element("span", {}, models.length === 2 ? "个共同有效小时 / 168 小时" : "个有效小时 / 168 小时")); root.append(summary);
-  setText("evaluation-subtitle", `${state.pollutant === "pm25" ? "PM₂.₅" : "O₃"} · ${dates[0]} — ${dates[6]} · ${models.length === 2 ? "双模型共同样本" : "可用模型有效样本"}`);
+  summary.append(element("strong", {}, String(pairs.length)), element("span", {}, models.length > 1 ? "个共同有效小时 / 168 小时" : "个有效小时 / 168 小时")); root.append(summary);
+  setText("evaluation-subtitle", `${state.pollutant === "pm25" ? "PM₂.₅" : "O₃"} · ${dates[0]} — ${dates[6]} · ${models.length > 1 ? `${models.length} 个模型版本的共同样本` : "可用模型有效样本"}`);
   if (!pairs.length) root.append(element("div", {class: "empty-inline"}, "所选起报的七天范围内尚无有效预报与观测配对，可切换历史起报查看。"));
   const table = element("table", {class: "eval-table"}), head = element("thead"), header = element("tr"), body = element("tbody");
   for (const title of ["模型", "MAE", "RMSE", "偏差"]) header.append(element("th", {scope: "col"}, title));
@@ -242,7 +310,9 @@ function renderEvaluation() {
     const mae = errors.length ? errors.reduce((s, v) => s + Math.abs(v), 0) / errors.length : null;
     const rmse = errors.length ? Math.sqrt(errors.reduce((s, v) => s + v * v, 0) / errors.length) : null;
     const bias = errors.length ? errors.reduce((s, v) => s + v, 0) / errors.length : null;
-    const row = element("tr"), label = element("td"); label.append(element("i", {class: `model-chip ${name}`}), document.createTextNode(NAMES[name]));
+    const row = element("tr"), label = element("td"), chip = element("i", {class: "model-chip"});
+    chip.style.backgroundColor = COLORS[name];
+    label.append(chip, document.createTextNode(seriesName(name)));
     row.append(label, element("td", {}, value(mae)), element("td", {}, value(rmse)), element("td", {}, `${bias > .05 ? "+" : ""}${value(bias)}`)); body.append(row);
   }
   root.append(table);
@@ -260,11 +330,9 @@ function renderEvaluation() {
 }
 function renderPayload() {
   const p = state.payload;
-  const entries = MODELS.filter(m => p.models[m]);
-  const maxHours = Math.max(0, ...entries.map(m => p.models[m].coverage?.hours || 0));
-  setText("horizon-value", maxHours || "—");
-  setText("horizon-detail", entries.map(m => `${NAMES[m]} ${p.models[m].coverage?.hours ?? "—"}h`).join(" / "));
-  setText("cycle-note", `01—03 同步批次 · ${entries.map(m => `${NAMES[m]} 第 ${p.models[m].revision} 版`).join(" / ")}`);
+  const entries = modelIds();
+  setText("cycle-note", `参考起报 · ${entries.map(m => `${seriesName(m)} r${p.models[m].revision}`).join(" / ")}`);
+  renderSeriesControls();
   state.rows = rowsForChart();
   renderChart(); renderTable(); renderDaily(); renderEvaluation();
   queueNavigation();
@@ -304,7 +372,7 @@ async function refresh(reason = "timer") {
       if (payload.cycle !== state.cycle) throw new Error("起报批次未对齐，等待下一次刷新");
       state.payload = payload; renderPayload();
     } else {
-      state.payload = null; state.rows = []; renderChart(); renderTable();
+      state.payload = null; state.rows = []; renderSeriesControls(); renderChart(); renderTable();
       $("daily-content").replaceChildren(element("div", {class: "empty-inline"}, "暂无预报批次"));
       $("evaluation-content").replaceChildren(element("div", {class: "empty-inline"}, "暂无预报批次"));
       $("figure-open").disabled = true;
@@ -342,11 +410,13 @@ document.querySelectorAll("[data-range]").forEach(button => button.addEventListe
   document.querySelectorAll("[data-range]").forEach(b => { const selected = b === button; b.classList.toggle("selected", selected); b.setAttribute("aria-pressed", String(selected)); });
   if (state.payload) { state.rows = rowsForChart(); renderChart(); renderTable(); }
 }));
-document.querySelectorAll("[data-series]").forEach(button => button.addEventListener("click", () => {
+document.querySelectorAll(".reference-legend").forEach(legend => legend.addEventListener("click", event => {
+  const button = event.target.closest("button[data-series]");
+  if (!button) return;
   const name = button.dataset.series;
-  if (state.visible.has(name)) state.visible.delete(name); else state.visible.add(name);
+  if (state.hiddenSeries.has(name)) state.hiddenSeries.delete(name); else state.hiddenSeries.add(name);
   document.querySelectorAll("[data-series]").forEach(other => {
-    other.setAttribute("aria-pressed", String(state.visible.has(other.dataset.series)));
+    other.setAttribute("aria-pressed", String(!state.hiddenSeries.has(other.dataset.series)));
   });
   renderChart();
   if (state.payload) renderDaily();
