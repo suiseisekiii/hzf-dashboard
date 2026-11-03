@@ -66,50 +66,7 @@ function renderOverview() {
   }
   setText("station-count", c.station_count ?? "—");
   setText("station-detail", c.latest_observation_time ? `观测更新至 ${stamp(c.latest_observation_time)}` : "等待观测数据");
-  const product = c.delivery?.hour;
-  setText("horizon-value", product?.status === "accepted" ? product.data.length : "—");
-  setText("horizon-detail", product ? `${stamp(product.due_at)} 提交时段` : "暂无小时上传归档");
-  renderDelivery("hour", product);
-  renderDelivery("day", c.delivery?.day);
   renderStations();
-}
-function renderDelivery(kind, product) {
-  const section = $("delivery-" + kind);
-  const heading = kind === "hour" ? "小时预报" : "日预报";
-  section.querySelector("h3").textContent = heading;
-  const meta = section.querySelector(".delivery-meta"), scroll = section.querySelector(".table-scroll");
-  const body = section.querySelector("tbody");
-  meta.replaceChildren();
-  if (!product) {
-    meta.textContent = `暂无已受理的${heading}`;
-    body.replaceChildren(); scroll.hidden = true;
-    return;
-  }
-  const times = [`提交时段 ${stamp(product.due_at, true)}`, `受理 ${stamp(product.accepted_at, true)}`];
-  if (product.predict_time) times.push(`起报 ${stamp(product.predict_time, true)}`);
-  meta.append(element("p", {}, times.join(" · ")));
-  if (product.status !== "accepted") {
-    meta.append(element("p", {}, "该时段已受理，上传归档暂不可读。"));
-    body.replaceChildren(); scroll.hidden = true;
-    return;
-  }
-  const sources = [["pm25", "PM₂.₅"], ["o3", "O₃"]].map(([key, name]) => {
-    const info = product.components?.[key];
-    if (!info?.model) return `${name} 来源未记录`;
-    const revision = info.revision == null ? "" : ` · r${info.revision}`;
-    return `${name}：${seriesName(info.model)}${revision}`;
-  });
-  meta.append(element("p", {}, sources.join("　/　")));
-  const data = product.data;
-  section.querySelector("h3").textContent = `${heading} · ${data.length} ${kind === "hour" ? "小时" : "天"}`;
-  const fragment = document.createDocumentFragment();
-  for (const record of data) {
-    const row = element("tr");
-    row.append(element("td", {}, kind === "hour" ? stamp(record.forecast_time, true) : record.forecast_time),
-      element("td", {}, record.pm2_5 ?? "—"), element("td", {}, record.o3 ?? "—"));
-    fragment.append(row);
-  }
-  body.replaceChildren(fragment); scroll.hidden = false;
 }
 function renderSeriesControls() {
   const names = ["observations", ...modelIds()];
@@ -331,6 +288,9 @@ function renderEvaluation() {
 function renderPayload() {
   const p = state.payload;
   const entries = modelIds();
+  const maxHours = Math.max(0, ...entries.map(m => p.models[m].coverage?.hours || 0));
+  setText("horizon-value", maxHours || "—");
+  setText("horizon-detail", entries.map(m => `${seriesName(m)} ${p.models[m].coverage?.hours ?? "—"}h`).join(" / "));
   setText("cycle-note", `参考起报 · ${entries.map(m => `${seriesName(m)} r${p.models[m].revision}`).join(" / ")}`);
   renderSeriesControls();
   state.rows = rowsForChart();
@@ -373,6 +333,7 @@ async function refresh(reason = "timer") {
       state.payload = payload; renderPayload();
     } else {
       state.payload = null; state.rows = []; renderSeriesControls(); renderChart(); renderTable();
+      setText("horizon-value", "—"); setText("horizon-detail", "暂无预报批次");
       $("daily-content").replaceChildren(element("div", {class: "empty-inline"}, "暂无预报批次"));
       $("evaluation-content").replaceChildren(element("div", {class: "empty-inline"}, "暂无预报批次"));
       $("figure-open").disabled = true;
